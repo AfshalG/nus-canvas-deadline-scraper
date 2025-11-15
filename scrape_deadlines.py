@@ -1031,15 +1031,22 @@ def format_deadlines_markdown(deadlines: List[Dict], changes: Optional[Dict] = N
             'other': '📌'
         }.get(deadline_type.lower(), '📌')
 
-        # Style 3: Minimal (Ultra-Clean)
-        md += f"**{formatted_date}** • {course_code} • {title}{weight_str}"
+        # Color badge for course (GitHub-style)
+        course_badge = f"![{course_code}](https://img.shields.io/badge/{course_code.replace('-', '--')}-{color}?style=flat-square)"
 
+        md += f"### {type_emoji} {formatted_date} - **{title}**{weight_str}\n"
+        md += f"> {course_badge} **{course}**\n"
+
+        # Highlight updates from announcements
         if notes and (is_update or 'EXTENDED' in notes.upper() or 'CHANGED' in notes.upper()):
-            md += f"\n  ⚠️ UPDATE: {notes}"
+            md += f"> \n> 🔔 **UPDATE:** {notes}\n"
         elif notes:
-            md += f"\n  ℹ️ {notes}"
+            md += f"> \n> 💡 {notes}\n"
 
-        md += "\n\n"
+        if source:
+            md += f"> \n> 📍 _Source: {source}_\n"
+
+        md += "\n"
 
     return md
 
@@ -1171,74 +1178,9 @@ def main():
                             deadlines = extractor.extract_deadlines(text, course_name, current_year)
                             all_deadlines.extend(deadlines)
 
-        # PRIORITY 6: Keyword-based intro PDF detection (fast, no AI needed)
-        logger.info(f"  [6/7] Checking for intro PDFs (keyword-based)...")
-        files = canvas.get_course_files(course_id)
-
-        if files:
-            # Fast keyword matching for intro documents
-            intro_keywords = [
-                'intro', 'syllabus', 'l0', 'l00', 'l01', 'topic_0', 'topic 0',
-                'course schedule', 'course outline', 'assessment', 'module info'
-            ]
-
-            intro_files = []
-            for f in files[:30]:  # Check first 30 files
-                filename = f.get('filename', '').lower()
-                if any(keyword in filename for keyword in intro_keywords):
-                    intro_files.append(f)
-                    if len(intro_files) >= 3:  # Max 3 intro docs
-                        break
-
-            if intro_files:
-                logger.info(f"  ✓ Found {len(intro_files)} intro document(s) by keyword")
-
-                # Process intro documents
-                for file_info in intro_files:
-                    filename = file_info.get('filename', 'unnamed')
-                    file_url = file_info.get('url')
-
-                    if not file_url:
-                        continue
-
-                    # Download file
-                    course_dir = DOWNLOAD_DIR / course_name.replace('/', '_')
-                    course_dir.mkdir(exist_ok=True)
-                    save_path = course_dir / filename
-
-                    if not save_path.exists():
-                        if not canvas.download_file(file_url, save_path):
-                            continue
-
-                    # Parse document
-                    logger.info(f"  Parsing: {filename}")
-                    text = DocumentParser.parse_document(save_path)
-
-                    if not text.strip():
-                        logger.warning(f"  No text extracted from {filename}")
-                        continue
-
-                    # Extract deadlines with retry on safety filter
-                    try:
-                        deadlines = extractor.extract_deadlines(text, course_name, current_year)
-                        all_deadlines.extend(deadlines)
-                    except Exception as e:
-                        if 'finish_reason' in str(e) and '2' in str(e):
-                            logger.warning(f"  Safety filter blocked {filename}, retrying with different model...")
-                            # Retry with a different model
-                            old_model_index = extractor.current_model_index
-                            extractor.current_model_index = (extractor.current_model_index + 1) % len(extractor.available_models)
-                            extractor.model = genai.GenerativeModel(extractor.available_models[extractor.current_model_index])
-                            try:
-                                deadlines = extractor.extract_deadlines(text, course_name, current_year)
-                                all_deadlines.extend(deadlines)
-                                logger.info(f"  ✓ Retry succeeded with {extractor.available_models[extractor.current_model_index]}")
-                            except:
-                                logger.error(f"  ✗ Retry failed, skipping {filename}")
-                            extractor.current_model_index = old_model_index
-                            extractor.model = genai.GenerativeModel(extractor.available_models[extractor.current_model_index])
-                        else:
-                            logger.error(f"  Failed to extract from {filename}: {e}")
+        # PRIORITY 6: AI-classified intro PDFs (DISABLED - too slow, causes timeouts)
+        # Using Canvas API sources is faster and more reliable
+        logger.info(f"  [6/7] Skipping AI file classification (disabled for speed)")
 
         # PRIORITY 7: Announcements (for last-minute deadline updates)
         logger.info(f"  [7/7] Checking announcements for deadline updates...")
