@@ -1,8 +1,9 @@
 # Environment variables (NEVER commit this!)
 .env
 
-# Downloaded materials
+# Downloaded materials and temporary files
 downloaded_materials/
+.temp/
 
 # Output files
 deadlines.json
